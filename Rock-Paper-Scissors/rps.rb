@@ -5,7 +5,7 @@ user_pick = gets.chomp.capitalize.strip
 
 while !choice.include?(user_pick) do
   puts "Невірний вибір. Спробуйте ще раз."
-  puts "Оберіть свій варіант: Rock, Paper або Scissors"
+  puts "Оберіть свій варіант: Rock, Paper, Scissors"
   user_pick = gets.chomp.capitalize.strip
 end
 

@@ -1,116 +1,149 @@
-def get_cake_input
-  puts "Введіть ваш пиріг (рядки через Enter, завершіть ввід порожнім рядком):"
-  cake = []
-  line = gets.strip
-  while line != ''
-    line = line.gsub('о', 'o')
-    cake << line.strip
-    line = gets.strip
+def parse_cake(input)
+  cake = input.strip.split("\n").map(&:chars)
+  raisins = []
+  cake.each_with_index do |row, y|
+    row.each_with_index do |cell, x|
+      raisins << [x, y] if cell == 'o' || cell == 'о' || cell == '0'
+    end
   end
-  cake
+  [cake, raisins]
 end
 
-def count_raisins(cake)
-  count = 0
-  cake.each do |row|
-    count += row.count('o')
-  end
-  count
-end
+def generate_rectangles(cake, raisin, area_per_piece)
+  height = cake.size
+  width = cake[0].size
+  possible_rects = []
 
-def cut_cake(cake, n)
-  rows = cake.size
-  cols = cake[0].size
-  total_area = rows * cols
-  target_area = total_area / n
-
-  max_width = 0
-  (1..cols).each do |w|
-    if target_area % w == 0 && w > max_width
-      max_width = w
-    end
+  rect_sizes = []
+  (1..area_per_piece).each do |h|
+    next unless area_per_piece % h == 0
+    w = area_per_piece / h
+    rect_sizes << [w, h]
   end
 
-  slices = []
-  current_slice = []
-  raisins_in_slice = 0
-  (0...rows).each do |i|
-    current_slice << cake[i]
-    raisins_in_slice += cake[i].count('o')
+  rect_sizes.each do |w, h|
+    (0..(width - w)).each do |x1|
+      (0..(height - h)).each do |y1|
+        x2 = x1 + w - 1
+        y2 = y1 + h - 1
 
-    if current_slice.size * max_width == target_area && raisins_in_slice == 1
-      slices << current_slice.join("\n")
-      current_slice = []
-      raisins_in_slice = 0
-    end
-  end
+        if raisin[0] >= x1 && raisin[0] <= x2 && raisin[1] >= y1 && raisin[1] <= y2
+          contains_other_raisin = false
+          (y1..y2).each do |y|
+            (x1..x2).each do |x|
+              next if [x, y] == raisin
+              if cake[y][x] == 'o' || cake[y][x] == 'о' || cake[y][x] == '0'
+                contains_other_raisin = true
+                break
+              end
+            end
+            break if contains_other_raisin
+          end
+          next if contains_other_raisin
 
-  if slices.empty?
-    (1..cols).each do |w|
-      if target_area % w == 0
-        slices = cut_cake_vertically(cake, n, w, target_area)
-        break if !slices.empty?
-      end
-    end
-  end
-
-  if slices.empty?
-    (1..rows).each do |h|
-      (1..cols).each do |w|
-        if target_area % (h * w) == 0
-          slices = cut_cake_cross(cake, n, h, w, target_area)
-          break if !slices.empty?
+          rect = {
+            x1: x1, y1: y1, x2: x2, y2: y2,
+            width: w, height: h,
+            area: w * h,
+            raisin: raisin,
+            cells: Set.new((x1..x2).to_a.product((y1..y2).to_a))
+          }
+          possible_rects << rect
         end
       end
-      break if !slices.empty?
     end
   end
 
-  slices
+  possible_rects
 end
 
-def cut_cake_vertically(cake, n, w, target_area)
-  slices = []
-  (0...cake[0].size).each do |j|
-    current_slice = []
-    (0...cake.size).each do |i|
-      current_slice << cake[i][j...j+w]
+def backtrack(raisins, rectangles, index, assigned_rects, covered_cells, best_solution)
+  if index == raisins.size
+    first_rect_width = assigned_rects.first[:width]
+    if best_solution[:rects].empty? || first_rect_width > best_solution[:rects].first[:width]
+      best_solution[:rects] = assigned_rects.map(&:dup)
     end
-    slices << current_slice.join("\n")
+    return
   end
-  slices
-end
 
-def cut_cake_cross(cake, n, h, w, target_area)
-  slices = []
-  (0...cake[0].size).each do |j|
-    current_slice = []
-    (0...cake.size).each do |i|
-      current_slice << cake[i][j...j+w]
+  raisin = raisins[index]
+  rectangles[raisin].each do |rect|
+    if rect[:cells].intersect?(covered_cells)
+      next
     end
-    slices << current_slice.join("\n")
+
+    assigned_rects << rect
+    covered_cells.merge(rect[:cells])
+
+    backtrack(raisins, rectangles, index + 1, assigned_rects, covered_cells, best_solution)
+
+    assigned_rects.pop
+    covered_cells.subtract(rect[:cells])
   end
-  slices
 end
 
-cake = get_cake_input
-n = count_raisins(cake)
-
-while n <= 1 || n >= 10
-  puts "Кількість родзинок повинна бути більше 1 та менше 10. Спробуйте ще раз."
-  cake = get_cake_input
-  n = count_raisins(cake)
+def format_output(cake, rects)
+  output = rects.map do |rect|
+    lines = []
+    (rect[:y1]..rect[:y2]).each do |y|
+      line = ''
+      (rect[:x1]..rect[:x2]).each do |x|
+        line << cake[y][x]
+      end
+      lines << line
+    end
+    lines.join("\n")
+  end
+  output
 end
 
-result = cut_cake(cake, n)
+def solve_cake_problem(input)
+  cake, raisins = parse_cake(input)
+  total_cells = cake.size * cake[0].size
+  area_per_piece = total_cells / raisins.size
 
-if result.empty?
-  puts "Не вдалося знайти рішення."
+  if total_cells % raisins.size != 0
+    return "Неможливо розділити торт на рівні частини."
+  end
+
+  rectangles = {}
+  raisins.each do |raisin|
+    rects = generate_rectangles(cake, raisin, area_per_piece)
+    if rects.empty?
+      return "Неможливо знайти прямокутник для родзинки на позиції #{raisin}."
+    end
+    rects.sort_by! { |rect| -rect[:width] }
+    rectangles[raisin] = rects
+  end
+
+  best_solution = { rects: [] }
+  backtrack(raisins, rectangles, 0, [], Set.new, best_solution)
+
+  if best_solution[:rects].empty?
+    return "Неможливо знайти рішення."
+  end
+
+  format_output(cake, best_solution[:rects])
+end
+
+
+cake_input = <<~END
+  .o.o....
+  ........
+  ....o...
+  ........
+  .....o..
+  ........
+END
+
+result = solve_cake_problem(cake_input)
+
+if result.is_a?(Array)
+  puts "Результат: \n["
+  result.each_with_index do |piece, index|
+    puts piece
+    puts index == result.size - 1 ? "]" : ","
+  end
 else
-  puts "Ось ваше рішення:"
-  result.each_with_index do |slice, idx|
-    puts "Шматок #{idx + 1}:"
-    puts slice
-    puts ""
-  end
+  puts result
 end

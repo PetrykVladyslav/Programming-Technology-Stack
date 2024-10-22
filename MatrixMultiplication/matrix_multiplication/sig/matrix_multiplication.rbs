@@ -1,0 +1,7 @@
+module MatrixMultiplication
+  VERSION: String
+  # See the writing guide of rbs: https://github.com/ruby/rbs#guides
+  def self.multiply: -> untyped
+
+  def self.valid_dimensions?: -> untyped
+end
